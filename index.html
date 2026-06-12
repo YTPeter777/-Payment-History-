@@ -1,0 +1,763 @@
+bash
+cat > /mnt/user-data/outputs/game-ledger.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚔️ 遊戲交易帳本</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0d0f1e;
+  --bg2:#12152a;
+  --surface:#181b30;
+  --surface2:#1e2240;
+  --glass:rgba(30,34,64,0.7);
+  --border:rgba(100,110,200,0.2);
+  --border-hi:rgba(240,192,64,0.4);
+  --gold:#f0c040;
+  --gold2:#ffd97d;
+  --gold-glow:rgba(240,192,64,0.25);
+  --green:#3dffa0;
+  --green-dim:rgba(61,255,160,0.15);
+  --red:#ff6b7a;
+  --red-dim:rgba(255,107,122,0.15);
+  --blue:#7eb8ff;
+  --purple:#c084fc;
+  --text:#dde2ff;
+  --text-dim:#6870a8;
+  --text-muted:#444870;
+  --r:14px;
+  --r-sm:8px;
+}
+
+/* ── Base ── */
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Noto Sans TC',sans-serif;
+  min-height:100vh;
+  overflow-x:hidden;
+  padding-bottom:80px;
+}
+
+/* ── Starfield canvas ── */
+#starfield{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+}
+
+/* ── Layout wrapper ── */
+.wrap{
+  position:relative;z-index:1;
+  max-width:680px;
+  margin:0 auto;
+  padding:32px 18px;
+}
+
+/* ── Header ── */
+header{
+  text-align:center;
+  margin-bottom:36px;
+  padding-bottom:28px;
+  position:relative;
+}
+header::after{
+  content:'';display:block;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold-glow),transparent);
+  position:absolute;bottom:0;left:10%;right:10%;
+}
+.header-icon{
+  font-size:3rem;
+  display:block;
+  margin-bottom:10px;
+  filter:drop-shadow(0 0 18px var(--gold));
+  animation:float 4s ease-in-out infinite;
+}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+header h1{
+  font-size:1.9rem;font-weight:900;
+  letter-spacing:0.1em;
+  background:linear-gradient(135deg,var(--gold2),var(--gold),#c8930a);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  text-shadow:none;
+  filter:drop-shadow(0 2px 12px var(--gold-glow));
+}
+header p{
+  color:var(--text-dim);font-size:0.8rem;
+  margin-top:6px;letter-spacing:0.05em;
+}
+
+/* ── Summary ── */
+.summary{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:12px;margin-bottom:28px;
+}
+.sum-card{
+  background:var(--glass);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:16px 12px;text-align:center;
+  backdrop-filter:blur(12px);
+  position:relative;overflow:hidden;
+  transition:transform 0.2s,border-color 0.2s;
+}
+.sum-card:hover{transform:translateY(-2px)}
+.sum-card::before{
+  content:'';position:absolute;
+  top:-40px;left:50%;transform:translateX(-50%);
+  width:80px;height:80px;border-radius:50%;
+  filter:blur(28px);opacity:0.5;
+  pointer-events:none;
+}
+.sum-card.income::before{background:var(--green)}
+.sum-card.expense::before{background:var(--red)}
+.sum-card.profit::before{background:var(--gold)}
+.sum-card.income{border-color:rgba(61,255,160,0.2)}
+.sum-card.expense{border-color:rgba(255,107,122,0.2)}
+.sum-card.profit{border-color:rgba(240,192,64,0.2)}
+
+.sum-card .s-icon{font-size:1.1rem;margin-bottom:4px;display:block}
+.sum-card .label{font-size:0.68rem;color:var(--text-dim);letter-spacing:0.04em;margin-bottom:6px}
+.sum-card .value{
+  font-size:1.1rem;font-weight:700;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;
+}
+.sum-card.income .value{color:var(--green)}
+.sum-card.expense .value{color:var(--red)}
+.sum-card.profit .value{color:var(--gold)}
+
+/* ── Form card ── */
+.form-card{
+  background:var(--glass);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:22px;
+  margin-bottom:24px;
+  backdrop-filter:blur(16px);
+  box-shadow:0 8px 40px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.form-card h2{
+  font-size:0.85rem;font-weight:700;
+  color:var(--gold);letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-bottom:18px;
+  display:flex;align-items:center;gap:8px;
+}
+.form-card h2::after{
+  content:'';flex:1;height:1px;
+  background:linear-gradient(90deg,var(--border-hi),transparent);
+}
+
+/* type toggle */
+.type-toggle{display:flex;gap:10px;margin-bottom:18px}
+.type-toggle button{
+  flex:1;padding:11px 8px;
+  border-radius:var(--r-sm);
+  border:1.5px solid var(--border);
+  background:transparent;
+  color:var(--text-dim);
+  font-family:inherit;font-size:0.88rem;font-weight:600;
+  cursor:pointer;letter-spacing:0.04em;
+  transition:all 0.25s;
+  position:relative;overflow:hidden;
+}
+.type-toggle button::before{
+  content:'';position:absolute;inset:0;opacity:0;
+  transition:opacity 0.25s;
+}
+.type-toggle button.active-sell{
+  border-color:var(--green);color:var(--green);
+  box-shadow:0 0 16px rgba(61,255,160,0.2),inset 0 0 16px rgba(61,255,160,0.07);
+}
+.type-toggle button.active-buy{
+  border-color:var(--red);color:var(--red);
+  box-shadow:0 0 16px rgba(255,107,122,0.2),inset 0 0 16px rgba(255,107,122,0.07);
+}
+
+/* grid rows */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-row.triple{grid-template-columns:1fr 1fr 1fr}
+.form-row.single{grid-template-columns:1fr}
+
+.field-group label{
+  display:block;font-size:0.7rem;
+  color:var(--text-dim);letter-spacing:0.06em;
+  text-transform:uppercase;margin-bottom:6px;
+}
+input,select,textarea{
+  width:100%;
+  background:rgba(13,15,30,0.6);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  color:var(--text);
+  font-family:inherit;font-size:0.9rem;
+  padding:10px 12px;outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s;
+  -webkit-appearance:none;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px var(--gold-glow);
+}
+select{cursor:pointer}
+select option{background:#1e2240;color:var(--text)}
+textarea{resize:vertical;min-height:56px;line-height:1.5}
+input[type=date]{color-scheme:dark}
+
+/* live total preview */
+.total-preview{
+  background:rgba(240,192,64,0.06);
+  border:1px solid rgba(240,192,64,0.15);
+  border-radius:var(--r-sm);
+  padding:10px 14px;
+  margin-bottom:14px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.total-preview .tp-label{font-size:0.75rem;color:var(--text-dim)}
+.total-preview .tp-value{font-size:1.1rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+
+/* submit btn */
+.btn-submit{
+  width:100%;padding:13px;
+  background:linear-gradient(135deg,#f0c040,#e0a020,#c88010);
+  color:#1a0f00;
+  font-family:inherit;font-size:0.95rem;font-weight:900;
+  border:none;border-radius:var(--r-sm);
+  cursor:pointer;letter-spacing:0.08em;
+  transition:opacity 0.2s,transform 0.15s,box-shadow 0.2s;
+  box-shadow:0 4px 20px rgba(240,160,0,0.3);
+  text-transform:uppercase;
+}
+.btn-submit:hover{opacity:0.9;box-shadow:0 6px 28px rgba(240,160,0,0.45);transform:translateY(-1px)}
+.btn-submit:active{transform:scale(0.98)}
+
+/* ── Filter bar ── */
+.filter-bar{
+  display:flex;gap:8px;
+  margin-bottom:16px;flex-wrap:wrap;align-items:center;
+}
+.filter-bar input{
+  flex:1;min-width:130px;
+  font-size:0.82rem;padding:9px 12px;
+}
+.filter-bar select{
+  width:auto;font-size:0.82rem;padding:9px 12px;
+}
+.rec-count{
+  margin-left:auto;font-size:0.72rem;
+  color:var(--text-dim);white-space:nowrap;
+  background:var(--surface2);
+  padding:4px 10px;border-radius:99px;
+  border:1px solid var(--border);
+}
+
+/* ── Section title ── */
+.section-title{
+  display:flex;align-items:center;gap:10px;
+  font-size:0.78rem;font-weight:700;
+  color:var(--gold);letter-spacing:0.1em;
+  text-transform:uppercase;
+  margin-bottom:14px;
+}
+.section-title::before,.section-title::after{
+  content:'';flex:1;height:1px;
+  background:linear-gradient(90deg,var(--gold-glow),transparent);
+}
+.section-title::before{background:linear-gradient(90deg,transparent,var(--gold-glow))}
+
+/* ── Records ── */
+.records{display:flex;flex-direction:column;gap:10px}
+
+.record{
+  background:var(--glass);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  display:flex;align-items:stretch;
+  overflow:hidden;
+  backdrop-filter:blur(10px);
+  transition:transform 0.18s,box-shadow 0.18s,border-color 0.18s;
+  animation:slideIn 0.3s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.record:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+.record.sell:hover{border-color:rgba(61,255,160,0.3);box-shadow:0 8px 32px rgba(61,255,160,0.08)}
+.record.buy:hover{border-color:rgba(255,107,122,0.3);box-shadow:0 8px 32px rgba(255,107,122,0.08)}
+
+/* glow side bar */
+.record-bar{
+  width:4px;flex-shrink:0;
+  position:relative;
+}
+.sell .record-bar{background:linear-gradient(180deg,#3dffa0,#00c96e)}
+.buy  .record-bar{background:linear-gradient(180deg,#ff6b7a,#cc2233)}
+
+.record-body{flex:1;padding:14px 16px;min-width:0}
+
+.record-top{
+  display:flex;align-items:center;
+  justify-content:space-between;gap:10px;
+  margin-bottom:8px;
+}
+.record-left{display:flex;align-items:center;gap:8px;min-width:0}
+
+.type-pill{
+  flex-shrink:0;
+  font-size:0.6rem;font-weight:800;
+  letter-spacing:0.06em;text-transform:uppercase;
+  padding:2px 7px;border-radius:4px;
+}
+.sell .type-pill{background:rgba(61,255,160,0.15);color:var(--green);border:1px solid rgba(61,255,160,0.3)}
+.buy  .type-pill{background:rgba(255,107,122,0.15);color:var(--red); border:1px solid rgba(255,107,122,0.3)}
+
+.record-name{
+  font-weight:700;font-size:1rem;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:#eef0ff;
+}
+.record-total{
+  font-size:1.05rem;font-weight:800;
+  font-variant-numeric:tabular-nums;flex-shrink:0;
+  letter-spacing:-0.01em;
+}
+.sell .record-total{color:var(--green)}
+.buy  .record-total{color:var(--red)}
+
+.record-meta{
+  display:flex;gap:8px;flex-wrap:wrap;
+  font-size:0.73rem;color:var(--text-dim);
+  align-items:center;
+}
+.meta-chip{
+  display:inline-flex;align-items:center;gap:3px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border);
+  border-radius:4px;padding:2px 7px;
+}
+
+/* rarity colors */
+.rarity-普通{color:#aaa}
+.rarity-稀有{color:var(--blue)}
+.rarity-史詩{color:var(--purple)}
+.rarity-傳說{color:var(--gold);text-shadow:0 0 8px var(--gold-glow)}
+.rarity-神話{
+  background:linear-gradient(90deg,#ff8c42,#ff4ecd,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  font-weight:800;
+}
+
+.record-note{
+  margin-top:8px;
+  font-size:0.74rem;color:var(--text-dim);
+  border-top:1px solid var(--border);
+  padding-top:8px;white-space:pre-wrap;word-break:break-all;
+  line-height:1.5;
+}
+
+.record-actions{
+  display:flex;flex-direction:column;
+  justify-content:center;padding:0 12px;gap:6px;
+}
+.btn-del{
+  background:none;
+  border:1px solid var(--border);
+  color:var(--text-muted);
+  border-radius:6px;
+  width:30px;height:30px;
+  cursor:pointer;font-size:0.75rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;
+}
+.btn-del:hover{border-color:var(--red);color:var(--red);background:var(--red-dim)}
+
+/* empty */
+.empty{
+  text-align:center;color:var(--text-dim);
+  padding:60px 0;
+}
+.empty .e-icon{
+  font-size:3rem;display:block;margin-bottom:12px;
+  filter:grayscale(0.5);opacity:0.6;
+}
+.empty p{font-size:0.88rem}
+.empty small{font-size:0.75rem;color:var(--text-muted);margin-top:4px;display:block}
+
+/* ── Bottom bar ── */
+.bottom-bar{
+  display:flex;gap:10px;margin-top:24px;
+}
+.btn-tool{
+  flex:1;padding:11px;
+  background:rgba(30,34,64,0.8);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  font-family:inherit;font-size:0.82rem;font-weight:600;
+  border-radius:var(--r-sm);
+  cursor:pointer;letter-spacing:0.03em;
+  backdrop-filter:blur(8px);
+  transition:all 0.18s;
+}
+.btn-tool:hover{background:var(--surface2);color:var(--text);border-color:rgba(160,170,255,0.3)}
+.btn-tool.danger:hover{border-color:rgba(255,107,122,0.4);color:var(--red)}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(90px);
+  background:linear-gradient(135deg,var(--surface2),var(--surface));
+  border:1px solid var(--border-hi);
+  color:var(--gold);
+  font-weight:700;font-size:0.84rem;letter-spacing:0.04em;
+  padding:11px 22px;border-radius:99px;
+  transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  z-index:999;pointer-events:none;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 1px var(--gold-glow);
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+@media(max-width:400px){
+  .form-row.triple{grid-template-columns:1fr 1fr}
+  .summary{gap:8px}
+  .sum-card{padding:12px 8px}
+  .sum-card .value{font-size:0.95rem}
+}
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<div class="wrap">
+
+<!-- Header -->
+<header>
+  <span class="header-icon">⚔️</span>
+  <h1>遊戲交易帳本</h1>
+  <p>掌握每一枚金幣的流向 · 記錄你的商人傳說</p>
+</header>
+
+<!-- Summary -->
+<div class="summary">
+  <div class="sum-card income">
+    <span class="s-icon">💰</span>
+    <div class="label">賣出收入</div>
+    <div class="value" id="totalIncome">0</div>
+  </div>
+  <div class="sum-card expense">
+    <span class="s-icon">🛒</span>
+    <div class="label">買入支出</div>
+    <div class="value" id="totalExpense">0</div>
+  </div>
+  <div class="sum-card profit">
+    <span class="s-icon">📊</span>
+    <div class="label">淨損益</div>
+    <div class="value" id="totalProfit">0</div>
+  </div>
+</div>
+
+<!-- Form -->
+<div class="form-card">
+  <h2>✦ 新增交易</h2>
+
+  <div class="type-toggle">
+    <button id="btnSell" class="active-sell" onclick="setType('sell')">📤 賣出</button>
+    <button id="btnBuy" onclick="setType('buy')">📥 買入</button>
+  </div>
+
+  <div class="form-row">
+    <div class="field-group">
+      <label>物品名稱 *</label>
+      <input type="text" id="itemName" placeholder="龍鱗甲、神木箭…" oninput="updatePreview()">
+    </div>
+    <div class="field-group">
+      <label>遊戲 / 市場</label>
+      <input type="text" id="itemGame" placeholder="MapleStory…">
+    </div>
+  </div>
+
+  <div class="form-row triple">
+    <div class="field-group">
+      <label>單價 *</label>
+      <input type="number" id="itemPrice" placeholder="0" min="0" oninput="updatePreview()">
+    </div>
+    <div class="field-group">
+      <label>數量 *</label>
+      <input type="number" id="itemQty" placeholder="1" min="1" value="1" oninput="updatePreview()">
+    </div>
+    <div class="field-group">
+      <label>幣種</label>
+      <select id="itemCurrency" onchange="updatePreview()">
+        <option>金幣</option><option>鑽石</option><option>美金</option>
+        <option>台幣</option><option>點數</option><option>其他</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="field-group">
+      <label>日期</label>
+      <input type="date" id="itemDate">
+    </div>
+    <div class="field-group">
+      <label>品質 / 稀有度</label>
+      <select id="itemRarity">
+        <option value="">— 不填 —</option>
+        <option>普通</option><option>稀有</option><option>史詩</option>
+        <option>傳說</option><option>神話</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row single">
+    <div class="field-group">
+      <label>備註</label>
+      <textarea id="itemNote" placeholder="成交管道、對方ID、特別說明…"></textarea>
+    </div>
+  </div>
+
+  <div class="total-preview">
+    <span class="tp-label">💎 交易總額預覽</span>
+    <span class="tp-value" id="previewTotal">— —</span>
+  </div>
+
+  <button class="btn-submit" onclick="addRecord()">⚡ 確認記帳</button>
+</div>
+
+<!-- Filter -->
+<div class="filter-bar">
+  <input type="text" id="searchInput" placeholder="🔍 搜尋物品…" oninput="renderRecords()">
+  <select id="filterType" onchange="renderRecords()">
+    <option value="">全部</option>
+    <option value="sell">賣出</option>
+    <option value="buy">買入</option>
+  </select>
+  <select id="sortBy" onchange="renderRecords()">
+    <option value="date-desc">最新優先</option>
+    <option value="date-asc">最舊優先</option>
+    <option value="total-desc">金額 ↓</option>
+    <option value="total-asc">金額 ↑</option>
+  </select>
+  <span class="rec-count" id="recordCount">0 筆</span>
+</div>
+
+<div class="section-title">交易記錄</div>
+<div class="records" id="recordsList"></div>
+
+<div class="bottom-bar">
+  <button class="btn-tool" onclick="exportCSV()">📋 匯出 CSV</button>
+  <button class="btn-tool danger" onclick="clearAll()">🗑️ 清除全部</button>
+</div>
+
+</div><!-- /wrap -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── Starfield ── */
+(function(){
+  const c=document.getElementById('starfield');
+  const ctx=c.getContext('2d');
+  let W,H,stars=[];
+  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight}
+  function init(){
+    resize();stars=[];
+    for(let i=0;i<160;i++){
+      stars.push({
+        x:Math.random()*W,y:Math.random()*H,
+        r:Math.random()*1.2+0.2,
+        o:Math.random()*0.5+0.1,
+        s:Math.random()*0.15+0.05,
+        d:Math.random()>0.5?1:-1
+      });
+    }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    stars.forEach(s=>{
+      s.o+=s.s*s.d*0.005;
+      if(s.o>0.7||s.o<0.05)s.d*=-1;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(180,190,255,${s.o})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',init);
+  init();draw();
+})();
+
+/* ── App ── */
+let records=JSON.parse(localStorage.getItem('gameRecords')||'[]');
+let currentType='sell';
+
+document.getElementById('itemDate').valueAsDate=new Date();
+
+function setType(t){
+  currentType=t;
+  document.getElementById('btnSell').className=t==='sell'?'active-sell':'';
+  document.getElementById('btnBuy').className=t==='buy'?'active-buy':'';
+  updatePreview();
+}
+
+function updatePreview(){
+  const price=parseFloat(document.getElementById('itemPrice').value)||0;
+  const qty=parseInt(document.getElementById('itemQty').value)||1;
+  const cur=document.getElementById('itemCurrency').value;
+  const total=price*qty;
+  const sign=currentType==='sell'?'+':'-';
+  const el=document.getElementById('previewTotal');
+  if(price>0){
+    el.textContent=sign+fmt(total)+' '+cur;
+    el.style.color=currentType==='sell'?'var(--green)':'var(--red)';
+  } else {
+    el.textContent='— —';
+    el.style.color='var(--gold)';
+  }
+}
+
+function addRecord(){
+  const name=document.getElementById('itemName').value.trim();
+  const price=parseFloat(document.getElementById('itemPrice').value);
+  const qty=parseInt(document.getElementById('itemQty').value)||1;
+  if(!name){showToast('⚠️ 請填寫物品名稱');return}
+  if(!price||price<=0){showToast('⚠️ 請填寫有效單價');return}
+  records.unshift({
+    id:Date.now(),type:currentType,name,
+    game:document.getElementById('itemGame').value.trim(),
+    price,qty,
+    currency:document.getElementById('itemCurrency').value,
+    rarity:document.getElementById('itemRarity').value,
+    date:document.getElementById('itemDate').value,
+    note:document.getElementById('itemNote').value.trim()
+  });
+  save();renderRecords();updateSummary();
+  showToast(currentType==='sell'?'💰 賣出已記錄！':'🛒 買入已記錄！');
+  document.getElementById('itemName').value='';
+  document.getElementById('itemPrice').value='';
+  document.getElementById('itemQty').value=1;
+  document.getElementById('itemRarity').value='';
+  document.getElementById('itemNote').value='';
+  document.getElementById('itemDate').valueAsDate=new Date();
+  updatePreview();
+}
+
+function deleteRecord(id){
+  records=records.filter(r=>r.id!==id);
+  save();renderRecords();updateSummary();showToast('🗑️ 已刪除');
+}
+
+function save(){localStorage.setItem('gameRecords',JSON.stringify(records))}
+
+function getFiltered(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  const type=document.getElementById('filterType').value;
+  const sort=document.getElementById('sortBy').value;
+  let list=records.filter(r=>{
+    const mq=!q||r.name.toLowerCase().includes(q)||(r.game||'').toLowerCase().includes(q);
+    const mt=!type||r.type===type;
+    return mq&&mt;
+  });
+  list.sort((a,b)=>{
+    if(sort==='date-desc')return b.id-a.id;
+    if(sort==='date-asc')return a.id-b.id;
+    const ta=a.price*a.qty,tb=b.price*b.qty;
+    return sort==='total-desc'?tb-ta:ta-tb;
+  });
+  return list;
+}
+
+function fmt(n){return n.toLocaleString('zh-TW')}
+
+const RARITY_ICON={普通:'⚪',稀有:'🔵',史詩:'🟣',傳說:'🟡',神話:'🌈'};
+
+function renderRecords(){
+  const list=getFiltered();
+  const el=document.getElementById('recordsList');
+  document.getElementById('recordCount').textContent=`${list.length} 筆`;
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><span class="e-icon">📭</span><p>尚無交易紀錄</p><small>新增第一筆交易開始記帳</small></div>`;
+    return;
+  }
+  el.innerHTML=list.map(r=>{
+    const total=r.price*r.qty;
+    const sign=r.type==='sell'?'+':'-';
+    const rarityHtml=r.rarity?`<span class="meta-chip rarity-${r.rarity}">${RARITY_ICON[r.rarity]||'✦'} ${r.rarity}</span>`:'';
+    const gameHtml=r.game?`<span class="meta-chip">🎮 ${r.game}</span>`:'';
+    const dateHtml=r.date?`<span class="meta-chip">📅 ${r.date}</span>`:'';
+    const noteHtml=r.note?`<div class="record-note">💬 ${r.note}</div>`:'';
+    return `<div class="record ${r.type}">
+      <div class="record-bar"></div>
+      <div class="record-body">
+        <div class="record-top">
+          <div class="record-left">
+            <span class="type-pill">${r.type==='sell'?'賣出':'買入'}</span>
+            <span class="record-name">${r.name}</span>
+          </div>
+          <div class="record-total">${sign}${fmt(total)} ${r.currency}</div>
+        </div>
+        <div class="record-meta">
+          <span class="meta-chip">📦 ×${r.qty} @ ${fmt(r.price)}</span>
+          ${rarityHtml}${gameHtml}${dateHtml}
+        </div>
+        ${noteHtml}
+      </div>
+      <div class="record-actions">
+        <button class="btn-del" onclick="deleteRecord(${r.id})" title="刪除">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateSummary(){
+  const income=records.filter(r=>r.type==='sell').reduce((s,r)=>s+r.price*r.qty,0);
+  const expense=records.filter(r=>r.type==='buy').reduce((s,r)=>s+r.price*r.qty,0);
+  const profit=income-expense;
+  document.getElementById('totalIncome').textContent=fmt(income);
+  document.getElementById('totalExpense').textContent=fmt(expense);
+  const pEl=document.getElementById('totalProfit');
+  pEl.textContent=(profit>=0?'+':'')+fmt(profit);
+  pEl.style.color=profit>=0?'var(--green)':'var(--red)';
+}
+
+function exportCSV(){
+  if(!records.length){showToast('沒有資料可匯出');return}
+  const rows=[['類型','物品','遊戲','單價','數量','幣種','總額','品質','日期','備註']];
+  records.forEach(r=>rows.push([r.type==='sell'?'賣出':'買入',r.name,r.game,r.price,r.qty,r.currency,r.price*r.qty,r.rarity,r.date,r.note]));
+  const csv=rows.map(r=>r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`遊戲帳本_${new Date().toLocaleDateString('zh-TW').replace(/\//g,'-')}.csv`;
+  a.click();showToast('📋 CSV 已下載！');
+}
+
+function clearAll(){
+  if(!records.length)return;
+  if(!confirm('確定要刪除所有交易紀錄嗎？此動作無法復原。'))return;
+  records=[];save();renderRecords();updateSummary();showToast('已清除全部紀錄');
+}
+
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+renderRecords();updateSummary();
+</script>
+</body>
+</html>
+HTMLEOF
+echo "Done"
